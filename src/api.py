@@ -27,18 +27,28 @@ def return_deadlines(deadlines_query):
     return result
 
 
+def token_check(client_id, token):
+    from hashlib import sha1
+    tmp_salt = '1DL8p598YPAT5XNorQMb'
+
+    return sha1(str(client_id).encode() + tmp_salt.encode()).hexdigest() == str(token)
+
+
 class BareApiRecourse(Resource):
-    def get(self):
+    def get(self, token):
         return {'status': 'no method provided'}, 400
 
 
 class DeadlineGetRecourse(Resource):
-    def get(self, client_id):
-        deadlines = Deadline.query.filter_by(
-            client_id=client_id
-        )
+    def get(self, token, client_id):
+        if token_check(client_id, token):
+            deadlines = Deadline.query.filter_by(
+                client_id=client_id
+            )
 
-        return return_deadlines(deadlines), 200
+            return return_deadlines(deadlines), 200
+        else:
+            return {'status': 'wrong api key'}, 403
 
 
 class DeadlineRecourse(Resource):
@@ -48,43 +58,53 @@ class DeadlineRecourse(Resource):
     args.add_argument('description', type=str)
     args.add_argument('final_date', type=lambda x: datetime.strptime(x,'%Y-%m-%d'))
 
-    def get(self):
+    def get(self, token):
         args = self.args.parse_args()
-        deadlines = Deadline.query.get_or_404(args['client_id'])
+        if token_check(args['client_id'], token):
+            deadlines = Deadline.query.get_or_404(args['client_id'])
 
-        return return_deadlines(deadlines), 200
+            return return_deadlines(deadlines), 200
+        else:
+            return {'status': 'wrong api key'}, 403
 
-    def post(self):
+    def post(self, token):
         args = self.args.parse_args()
 
-        is_client = Client.query.filter_by(
-            id=args['client_id']
-        ).first()
+        if token_check(args['client_id'], token):
 
-        if not is_client:
-            new_client = Client(id=args['client_id'])
-            db.session.add(new_client)
+            is_client = Client.query.filter_by(
+                id=args['client_id']
+            ).first()
+
+            if not is_client:
+                new_client = Client(id=args['client_id'])
+                db.session.add(new_client)
+                db.session.commit()
+
+            new_deadline = Deadline(
+                client_id=args['client_id'],
+                description=args['description'],
+                final_date=args['final_date']
+            )
+            db.session.add(new_deadline)
             db.session.commit()
 
-        new_deadline = Deadline(
-            client_id=args['client_id'],
-            description=args['description'],
-            final_date=args['final_date']
-        )
-        db.session.add(new_deadline)
-        db.session.commit()
+            return {'status': 'success'}, 201
+        else:
+            return {'status': 'wrong api key'}, 403
 
-        return {'status': 'success'}, 201
-
-    def delete(self):
+    def delete(self, token):
         args = self.args.parse_args()
 
-        Deadline.query.filter_by(id=args['deadline_id']).delete()
-        db.session.commit()
+        if token_check(args['client_id'], token):
+            Deadline.query.filter_by(id=args['deadline_id']).delete()
+            db.session.commit()
 
-        return {'status': 'success'}, 202
+            return {'status': 'success'}, 202
+        else:
+            return {'status': 'wrong api key'}, 403
 
 
 api.add_resource(BareApiRecourse, '/')
-api.add_resource(DeadlineRecourse, '/deadline')
-api.add_resource(DeadlineGetRecourse, '/deadline/<int:client_id>')
+api.add_resource(DeadlineRecourse, '/deadline/<token>')
+api.add_resource(DeadlineGetRecourse, '/deadline/<token>/<int:client_id>')
