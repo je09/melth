@@ -5,4 +5,4 @@ RUN pip install -r /requirements.txt
 WORKDIR /melth
 EXPOSE 8003
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8003", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8003", "app:create_app()"]
